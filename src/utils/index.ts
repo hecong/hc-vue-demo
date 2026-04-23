@@ -1,4 +1,5 @@
 import JSEncrypt from 'jsencrypt'
+import dayjs from 'dayjs'
 
 export function encryptPassword(password: string, publicKey: string): string {
   const encrypt = new JSEncrypt()
@@ -15,23 +16,14 @@ export function getUrlParams(url: string): Record<string, string> {
   return params
 }
 
-export function formatDate(date: string | Date, format: string = 'YYYY-MM-DD HH:mm:ss'): string {
+/**
+ * 格式化日期
+ * @param date 日期字符串或 Date 对象
+ * @param format 格式化模板，默认 'YYYY-MM-DD HH:mm:ss'
+ */
+export function formatDate(date: string | Date | null | undefined, format: string = 'YYYY-MM-DD HH:mm:ss'): string {
   if (!date) return ''
-  const d = typeof date === 'string' ? new Date(date) : date
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const hours = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
-  const seconds = String(d.getSeconds()).padStart(2, '0')
-
-  return format
-    .replace('YYYY', String(year))
-    .replace('MM', month)
-    .replace('DD', day)
-    .replace('HH', hours)
-    .replace('mm', minutes)
-    .replace('ss', seconds)
+  return dayjs(date).format(format)
 }
 
 export function debounce<T extends (...args: any[]) => any>(

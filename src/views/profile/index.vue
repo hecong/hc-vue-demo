@@ -5,7 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { getCUserProfile, updateCUserProfile, changeCUserPassword } from '@/api/cuser'
 import { changeEnterpriseUserPassword } from '@/api/enterprise'
 import type { CUserResponse } from '@/types'
-import type { UpdateProfileRequest } from '@/types/api.d'
+import type { UpdateProfileRequest } from '@/types/api'
 
 const userStore = useUserStore()
 const loading = ref(false)
@@ -34,8 +34,13 @@ const displaySub = computed(() => {
 })
 
 async function fetchCUserProfile() {
-  loading.value = true
+  let loadingTimer: ReturnType<typeof setTimeout> | null = null
   try {
+    // 延迟显示 loading，避免和页面入场 fadeIn 动画叠加造成闪烁
+    loadingTimer = setTimeout(() => {
+      loading.value = true
+    }, 300)
+
     const res = await getCUserProfile()
     if (res.data) {
       cUserInfo.value = res.data
@@ -49,6 +54,7 @@ async function fetchCUserProfile() {
   } catch (e) {
     console.error(e)
   } finally {
+    if (loadingTimer) clearTimeout(loadingTimer)
     loading.value = false
   }
 }
@@ -114,7 +120,7 @@ onMounted(() => {
           <div class="user-info">
             <h3>{{ displayName }}</h3>
             <p>{{ displaySub }}</p>
-            <el-tag size="small" :type="isCUser ? '' : isBUser ? 'success' : 'warning'">
+            <el-tag size="small" :type="isCUser ? 'info' : isBUser ? 'success' : 'warning'">
               {{ isCUser ? 'C端用户' : isBUser ? 'B端用户' : '平台管理员' }}
             </el-tag>
           </div>
@@ -201,35 +207,67 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .profile-page {
-  padding: 16px;
+  animation: fadeIn 0.4s var(--transition-base);
 
   .profile-content {
-    max-width: 640px;
+    max-width: 680px;
+    margin: 0 auto;
 
     .profile-header {
       display: flex;
       align-items: center;
-      gap: 20px;
-      padding: 16px 0;
+      gap: var(--space-5);
+      padding: var(--space-4) 0 var(--space-5);
+
+      .el-avatar {
+        border: 3px solid var(--bg-surface);
+        box-shadow: var(--shadow-md);
+        transition: transform var(--transition-base);
+
+        &:hover {
+          transform: scale(1.05);
+        }
+      }
 
       .user-info {
         h3 {
           margin: 0 0 6px 0;
-          font-size: 20px;
+          font-size: 22px;
+          font-weight: 700;
+          color: var(--text-primary);
+          letter-spacing: -0.3px;
         }
 
         p {
-          margin: 0 0 8px 0;
-          color: #909399;
-          font-size: 14px;
+          margin: 0 0 10px 0;
+          color: var(--text-tertiary);
+          font-size: var(--text-sm);
+          font-weight: 500;
+        }
+
+        .el-tag {
+          font-weight: 600;
         }
       }
     }
 
     h4 {
-      margin: 0 0 16px 0;
-      font-size: 15px;
-      color: #303133;
+      margin: 0 0 var(--space-4) 0;
+      font-size: var(--text-base);
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      &::before {
+        content: '';
+        width: 4px;
+        height: 18px;
+        background: linear-gradient(180deg, var(--primary-400), var(--primary-600));
+        border-radius: var(--radius-full);
+      }
     }
 
     .section-form {
@@ -238,6 +276,14 @@ onMounted(() => {
 
     .b-info {
       margin-bottom: 0;
+
+      :deep(.el-descriptions__cell) {
+        padding: var(--space-3) var(--space-4);
+      }
+    }
+
+    .el-divider {
+      margin: var(--space-6) 0;
     }
   }
 }

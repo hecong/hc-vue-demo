@@ -1,3 +1,8 @@
+/*
+ * 兼容性样式与工具类
+ * 全局重置已迁移至 design-system.scss
+ */
+
 :root {
   --color-primary: #409eff;
   --color-success: #67c23a;
@@ -28,42 +33,6 @@
 
   --border-radius-base: 4px;
   --border-radius-small: 2px;
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html,
-body {
-  width: 100%;
-  height: 100%;
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
-  font-size: var(--font-size-base);
-  color: var(--text-color-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-#app {
-  width: 100%;
-  height: 100%;
-}
-
-a {
-  text-decoration: none;
-  color: inherit;
-}
-
-ul, ol {
-  list-style: none;
-}
-
-input, textarea, button {
-  font-family: inherit;
-  outline: none;
 }
 
 .page-container {

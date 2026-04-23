@@ -1,24 +1,74 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getRoleList, addRole, editRole, deleteRole, assignPermissions, getPermissionList } from '@/api/system'
 import type { RoleResponse, PermissionResponse } from '@/types'
+import { useTable, useDialog } from '@/composables'
 
-const tableData = ref<RoleResponse[]>([])
-const loading = ref(false)
+// ==================== 表格 ====================
+const {
+  loading,
+  tableData,
+  fetchData
+} = useTable<RoleResponse>(
+  async () => {
+    const res = await getRoleList()
+    return res.data || []
+  },
+  {},
+  { defaultPageSize: 0 }
+)
 
+// ==================== 新增/编辑弹窗 ====================
 const formRef = ref<FormInstance>()
-const dialogVisible = ref(false)
-const dialogTitle = ref('')
-const editingId = ref<number | null>(null)
-const form = reactive({ name: '', code: '', description: '' })
+
 const rules: FormRules = {
   name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
   code: [{ required: true, message: '请输入角色编码', trigger: 'blur' }]
 }
 
-// 分配权限
+const {
+  visible: dialogVisible,
+  title: dialogTitle,
+  submitting,
+  formData,
+  openAdd,
+  openEdit,
+  handleSubmit
+} = useDialog<{ name: string; code: string; description: string }>(
+  async (data, editing, id) => {
+    if (editing && id) {
+      await editRole(Number(id), data)
+    } else {
+      await addRole(data)
+    }
+    ElMessage.success('操作成功')
+    fetchData()
+  },
+  { name: '', code: '', description: '' },
+  { addTitle: '新增角色', editTitle: '编辑角色' }
+)
+
+async function submitForm() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+  await handleSubmit(() => Promise.resolve(true))
+}
+
+// ==================== 删除 ====================
+async function handleDelete(row: RoleResponse) {
+  await ElMessageBox.confirm(`确定删除角色 "${row.name}" 吗？`, '提示', { type: 'warning' })
+  try {
+    await deleteRole(row.id)
+    ElMessage.success('删除成功')
+    fetchData()
+  } catch {
+    // ignore
+  }
+}
+
+// ==================== 分配权限 ====================
 const assignDialogVisible = ref(false)
 const assignRoleId = ref<number | null>(null)
 const assignRoleName = ref('')
@@ -26,71 +76,16 @@ const allPermissions = ref<PermissionResponse[]>([])
 const selectedPermissionIds = ref<number[]>([])
 const assignLoading = ref(false)
 
-async function fetchList() {
-  loading.value = true
-  try {
-    const res = await getRoleList()
-    tableData.value = res.data || []
-  } catch (e) {
-    // ignore
-  } finally {
-    loading.value = false
-  }
-}
-
-function openAdd() {
-  dialogTitle.value = '新增角色'
-  editingId.value = null
-  Object.assign(form, { name: '', code: '', description: '' })
-  dialogVisible.value = true
-}
-
-function openEdit(row: RoleResponse) {
-  dialogTitle.value = '编辑角色'
-  editingId.value = row.id
-  Object.assign(form, { name: row.name, code: row.code, description: row.description })
-  dialogVisible.value = true
-}
-
-async function submitForm() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-  try {
-    if (editingId.value !== null) {
-      await editRole(editingId.value, { ...form })
-    } else {
-      await addRole({ ...form })
-    }
-    ElMessage.success('操作成功')
-    dialogVisible.value = false
-    fetchList()
-  } catch (e) {
-    // ignore
-  }
-}
-
-async function handleDelete(row: RoleResponse) {
-  await ElMessageBox.confirm(`确定删除角色 "${row.name}" 吗？`, '提示', { type: 'warning' })
-  try {
-    await deleteRole(row.id)
-    ElMessage.success('删除成功')
-    fetchList()
-  } catch (e) {
-    // ignore
-  }
-}
-
 async function openAssign(row: RoleResponse) {
   assignRoleId.value = row.id
   assignRoleName.value = row.name
+  selectedPermissionIds.value = []
   assignLoading.value = true
   assignDialogVisible.value = true
   try {
     const res = await getPermissionList()
     allPermissions.value = res.data || []
-    // 初始化已选（实际应从接口获取该角色已有权限，此处默认空）
-    selectedPermissionIds.value = []
-  } catch (e) {
+  } catch {
     // ignore
   } finally {
     assignLoading.value = false
@@ -103,12 +98,10 @@ async function submitAssign() {
     await assignPermissions({ roleId: assignRoleId.value, permissionIds: selectedPermissionIds.value })
     ElMessage.success('权限分配成功')
     assignDialogVisible.value = false
-  } catch (e) {
+  } catch {
     // ignore
   }
 }
-
-onMounted(fetchList)
 </script>
 
 <template>
@@ -138,20 +131,20 @@ onMounted(fetchList)
 
     <!-- 新增/编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="440px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
+      <el-form ref="formRef" :model="formData" :rules="rules" label-width="80px">
         <el-form-item label="角色名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入角色名称" />
+          <el-input v-model="formData.name" placeholder="请输入角色名称" />
         </el-form-item>
         <el-form-item label="角色编码" prop="code">
-          <el-input v-model="form.code" placeholder="如：admin、editor" />
+          <el-input v-model="formData.code" placeholder="如：admin、editor" />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请输入描述" />
+          <el-input v-model="formData.description" type="textarea" :rows="3" placeholder="请输入描述" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确定</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
 
@@ -178,18 +171,28 @@ onMounted(fetchList)
 
 <style scoped lang="scss">
 .role-page {
-  padding: 16px;
+  animation: fadeIn 0.4s var(--transition-base);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
 }
 
 .perm-item {
-  padding: 6px 0;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 10px var(--space-3);
+  border-bottom: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: var(--gray-50);
+  }
 
   &:last-child {
     border-bottom: none;

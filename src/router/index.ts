@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { storage } from '@/utils/storage'
+import { useUserStore } from '@/stores/user'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -80,8 +82,8 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
-  const title = to.meta.title as string
+  const token = storage.getToken()
+  const title = to.meta.title
 
   if (title) {
     document.title = `${title} - HC管理系统`
@@ -95,22 +97,18 @@ router.beforeEach((to, from, next) => {
 
     const requiredPermissions = to.meta.permissions
     if (requiredPermissions?.length) {
-      const storedUserInfo = localStorage.getItem('currentUserInfo')
-      if (storedUserInfo) {
-        try {
-          const userInfo = JSON.parse(storedUserInfo)
-          const userPermissions: string[] = userInfo.permissions || []
-          // 无权限数据时放行，等页面加载后 store 更新再判断
-          if (userPermissions.length > 0) {
-            const hasPermission = requiredPermissions.every(p => userPermissions.includes(p))
-            if (!hasPermission) {
-              next({ name: 'Dashboard' })
-              return
-            }
-          }
-        } catch {
-          // 解析失败时放行
+      const userStore = useUserStore()
+      const userPermissions = userStore.permissions
+
+      if (userPermissions.length > 0) {
+        const hasPermission = requiredPermissions.every(p => userPermissions.includes(p))
+        if (!hasPermission) {
+          next({ name: 'Dashboard' })
+          return
         }
+      } else {
+        // 已登录但权限数据尚未加载，放行由页面内获取后重新判断
+        // 若需更严格，可在此触发 fetchUserInfo 并等待结果
       }
     }
   }

@@ -1,96 +1,81 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getPermissionList, addPermission, editPermission, deletePermission, initPermissionCache } from '@/api/system'
 import type { PermissionResponse } from '@/types'
+import { useTable, useDialog } from '@/composables'
 
-const tableData = ref<PermissionResponse[]>([])
-const loading = ref(false)
+// ==================== 表格 ====================
+const {
+  loading,
+  tableData,
+  fetchData
+} = useTable<PermissionResponse>(
+  async () => {
+    const res = await getPermissionList()
+    return res.data || []
+  },
+  {},
+  { defaultPageSize: 0 }
+)
 
+// ==================== 新增/编辑弹窗 ====================
 const formRef = ref<FormInstance>()
-const dialogVisible = ref(false)
-const dialogTitle = ref('')
-const editingId = ref<number | null>(null)
-const form = reactive({
-  name: '',
-  code: '',
-  type: 'MENU',
-  path: '',
-  parentId: undefined as number | undefined
-})
+
 const rules: FormRules = {
   name: [{ required: true, message: '请输入权限名称', trigger: 'blur' }],
   code: [{ required: true, message: '请输入权限编码', trigger: 'blur' }],
   type: [{ required: true, message: '请选择类型', trigger: 'change' }]
 }
 
-async function fetchList() {
-  loading.value = true
-  try {
-    const res = await getPermissionList()
-    tableData.value = res.data || []
-  } catch (e) {
-    // ignore
-  } finally {
-    loading.value = false
-  }
-}
-
-async function handleInitCache() {
-  try {
-    await initPermissionCache()
-    ElMessage.success('权限缓存初始化成功')
-  } catch (e) {
-    // ignore
-  }
-}
-
-function openAdd() {
-  dialogTitle.value = '新增权限'
-  editingId.value = null
-  Object.assign(form, { name: '', code: '', type: 'MENU', path: '', parentId: undefined })
-  dialogVisible.value = true
-}
-
-function openEdit(row: PermissionResponse) {
-  dialogTitle.value = '编辑权限'
-  editingId.value = row.id
-  Object.assign(form, {
-    name: row.name,
-    code: row.code,
-    type: row.type,
-    path: row.path || '',
-    parentId: row.parentId || undefined
-  })
-  dialogVisible.value = true
-}
-
-async function submitForm() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-  try {
-    const payload = { ...form, parentId: form.parentId || undefined }
-    if (editingId.value !== null) {
-      await editPermission(editingId.value, payload)
+const {
+  visible: dialogVisible,
+  title: dialogTitle,
+  submitting,
+  formData,
+  openAdd,
+  openEdit,
+  handleSubmit
+} = useDialog<{ name: string; code: string; type: string; path: string; parentId?: number }>(
+  async (data, editing, id) => {
+    const payload = { ...data, parentId: data.parentId || undefined }
+    if (editing && id) {
+      await editPermission(Number(id), payload)
     } else {
       await addPermission(payload)
     }
     ElMessage.success('操作成功')
-    dialogVisible.value = false
-    fetchList()
-  } catch (e) {
-    // ignore
-  }
+    fetchData()
+  },
+  { name: '', code: '', type: 'MENU', path: '', parentId: undefined },
+  { addTitle: '新增权限', editTitle: '编辑权限' }
+)
+
+async function submitForm() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+  await handleSubmit(() => Promise.resolve(true))
 }
 
+// ==================== 删除 ====================
 async function handleDelete(row: PermissionResponse) {
   await ElMessageBox.confirm(`确定删除权限 "${row.name}" 吗？`, '提示', { type: 'warning' })
   try {
     await deletePermission(row.id)
     ElMessage.success('删除成功')
-    fetchList()
-  } catch (e) {
+    fetchData()
+  } catch {
+    // ignore
+  }
+}
+
+// ==================== 缓存初始化 ====================
+async function handleInitCache() {
+  try {
+    await initPermissionCache()
+    ElMessage.success('权限缓存初始化成功')
+  } catch {
     // ignore
   }
 }
@@ -101,11 +86,9 @@ function getTypeName(type: string) {
 }
 
 function getTypeTag(type: string) {
-  const map: Record<string, string> = { MENU: '', BUTTON: 'success', API: 'warning' }
+  const map: Record<string, 'success' | 'warning' | 'info'> = { MENU: 'info', BUTTON: 'success', API: 'warning' }
   return map[type] || 'info'
 }
-
-onMounted(fetchList)
 </script>
 
 <template>
@@ -145,30 +128,30 @@ onMounted(fetchList)
 
     <!-- 新增/编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="480px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+      <el-form ref="formRef" :model="formData" :rules="rules" label-width="90px">
         <el-form-item label="权限名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入权限名称" />
+          <el-input v-model="formData.name" placeholder="请输入权限名称" />
         </el-form-item>
         <el-form-item label="权限编码" prop="code">
-          <el-input v-model="form.code" placeholder="如：user:list、user:add" />
+          <el-input v-model="formData.code" placeholder="如：user:list、user:add" />
         </el-form-item>
         <el-form-item label="类型" prop="type">
-          <el-select v-model="form.type" style="width: 100%">
+          <el-select v-model="formData.type" style="width: 100%">
             <el-option label="菜单" value="MENU" />
             <el-option label="按钮" value="BUTTON" />
             <el-option label="接口" value="API" />
           </el-select>
         </el-form-item>
         <el-form-item label="路径">
-          <el-input v-model="form.path" placeholder="菜单路径或接口路径" />
+          <el-input v-model="formData.path" placeholder="菜单路径或接口路径" />
         </el-form-item>
         <el-form-item label="父级ID">
-          <el-input-number v-model="form.parentId" :min="0" placeholder="不填为顶级" style="width: 100%" controls-position="right" />
+          <el-input-number v-model="formData.parentId" :min="0" placeholder="不填为顶级" style="width: 100%" controls-position="right" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确定</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
   </div>
@@ -176,13 +159,17 @@ onMounted(fetchList)
 
 <style scoped lang="scss">
 .permission-page {
-  padding: 16px;
+  animation: fadeIn 0.4s var(--transition-base);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
 
   div {
     display: flex;

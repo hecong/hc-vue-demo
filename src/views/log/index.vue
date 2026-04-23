@@ -1,40 +1,32 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
 import { getLoginLogPage } from '@/api/log'
 import type { LoginLogResponse } from '@/types'
+import { useTable } from '@/composables'
 
-const tableData = ref<LoginLogResponse[]>([])
-const total = ref(0)
-const loading = ref(false)
-const pageNum = ref(1)
-const pageSize = ref(20)
-const searchForm = reactive({ userType: '', userId: undefined as number | undefined })
-
-async function fetchList() {
-  loading.value = true
-  try {
-    const params: any = { pageNum: pageNum.value, pageSize: pageSize.value }
-    if (searchForm.userType) params.userType = searchForm.userType
-    if (searchForm.userId) params.userId = searchForm.userId
-    const res = await getLoginLogPage(params)
-    tableData.value = res.data?.list || []
-    total.value = res.data?.total || 0
-  } catch (e) {
-    // ignore
-  } finally {
-    loading.value = false
-  }
-}
-
-function search() {
-  pageNum.value = 1
-  fetchList()
-}
-
-function resetSearch() {
-  Object.assign(searchForm, { userType: '', userId: undefined })
-  search()
-}
+const {
+  loading,
+  tableData,
+  total,
+  pageNum,
+  pageSize,
+  searchParams,
+  handleSearch,
+  handleReset,
+  handlePageChange,
+  handleSizeChange
+} = useTable<LoginLogResponse, { userType: string; userId: number | undefined }>(
+  async (params) => {
+    const res = await getLoginLogPage({
+      pageNum: params.pageNum,
+      pageSize: params.pageSize,
+      userType: params.userType || undefined,
+      userId: params.userId || undefined
+    })
+    return res.data ?? undefined
+  },
+  { userType: '', userId: undefined },
+  { defaultPageSize: 20, pageSizes: [20, 50, 100] }
+)
 
 function getStatusTag(status: number) {
   return status === 1 ? 'success' : 'danger'
@@ -48,8 +40,6 @@ function getUserTypeText(type: string) {
   const map: Record<string, string> = { C: 'C端用户', B: 'B端用户', P: '平台管理员' }
   return map[type] || type
 }
-
-onMounted(fetchList)
 </script>
 
 <template>
@@ -59,20 +49,20 @@ onMounted(fetchList)
         <span>登录日志</span>
       </template>
 
-      <el-form :inline="true" :model="searchForm" class="search-form">
+      <el-form :inline="true" :model="searchParams" class="search-form">
         <el-form-item label="用户类型">
-          <el-select v-model="searchForm.userType" placeholder="全部" clearable style="width: 130px">
+          <el-select v-model="searchParams.userType" placeholder="全部" clearable style="width: 130px">
             <el-option label="C端用户" value="C" />
             <el-option label="B端用户" value="B" />
             <el-option label="平台管理员" value="P" />
           </el-select>
         </el-form-item>
         <el-form-item label="用户ID">
-          <el-input-number v-model="searchForm.userId" :min="1" placeholder="请输入用户ID" controls-position="right" style="width: 150px" />
+          <el-input-number v-model="searchParams.userId" :min="1" placeholder="请输入用户ID" controls-position="right" style="width: 150px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="search">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
+          <el-button type="primary" @click="handleSearch">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
         </el-form-item>
       </el-form>
 
@@ -105,7 +95,8 @@ onMounted(fetchList)
         :page-sizes="[20, 50, 100]"
         layout="total, sizes, prev, pager, next"
         class="pagination"
-        @change="fetchList"
+        @change="handlePageChange"
+        @size-change="handleSizeChange"
       />
     </el-card>
   </div>
@@ -113,15 +104,21 @@ onMounted(fetchList)
 
 <style scoped lang="scss">
 .log-page {
-  padding: 16px;
+  animation: fadeIn 0.4s var(--transition-base);
 }
 
 .search-form {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
 }
 
 .pagination {
-  margin-top: 16px;
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-light);
   justify-content: flex-end;
 }
 </style>

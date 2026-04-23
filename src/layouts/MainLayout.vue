@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMenu, ElMenuItem, ElSubMenu, ElAvatar, ElDropdown, ElDropdownMenu, ElDropdownItem, ElIcon, ElButton } from 'element-plus'
+import { ElMenu, ElMenuItem, ElAvatar, ElDropdown, ElDropdownMenu, ElDropdownItem, ElIcon, ElButton } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import {
   HomeFilled,
@@ -20,7 +20,7 @@ const route = useRoute()
 const userStore = useUserStore()
 
 const isCollapsed = ref(false)
-const activeMenu = ref(route.path)
+const activeMenu = computed(() => route.path)
 
 const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
 
@@ -63,8 +63,15 @@ const visibleMenus = computed(() => {
   ].filter(item => item.show)
 })
 
+let isNavigating = false
+
 const handleMenuSelect = (path: string) => {
-  router.push(path)
+  if (route.path === path) return
+  if (isNavigating) return
+  isNavigating = true
+  router.push(path).catch(() => {}).finally(() => {
+    isNavigating = false
+  })
 }
 
 const toggleCollapse = () => {
@@ -101,7 +108,6 @@ onMounted(async () => {
         :default-active="activeMenu"
         :collapse="isCollapsed"
         :collapse-transition="false"
-        router
         @select="handleMenuSelect"
       >
         <el-menu-item
@@ -168,57 +174,109 @@ onMounted(async () => {
   width: 100%;
   height: 100vh;
   overflow: hidden;
+  background: var(--bg-body);
 }
 
 .sidebar {
-  width: 200px;
+  width: 240px;
   height: 100vh;
-  background: #304156;
-  transition: width 0.3s;
+  background: var(--bg-sidebar);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
 
   &.collapsed {
-    width: 64px;
+    width: 72px;
   }
 
   .logo {
-    height: 60px;
+    height: 68px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #2b3a4a;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.1));
     color: #fff;
-    font-size: 18px;
-    font-weight: bold;
-    border-bottom: 1px solid #3a4a5a;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 20%;
+      right: 20%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+    }
 
     h1 {
       margin: 0;
       white-space: nowrap;
+      background: linear-gradient(135deg, #fff, #93c5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     span {
-      font-size: 20px;
+      font-size: 22px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #fff, #93c5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
   }
 
   :deep(.el-menu) {
     border: none;
-    background: #304156;
+    background: transparent;
+    padding: var(--space-2) 0;
+    flex: 1;
 
     .el-menu-item {
-      color: #bfcbd9;
-      height: 50px;
-      line-height: 50px;
+      color: rgba(255, 255, 255, 0.65);
+      height: 48px;
+      line-height: 48px;
+      margin: 3px 10px;
+      border-radius: var(--radius-md);
+      font-weight: 500;
+      font-size: var(--text-sm);
+      transition: all var(--transition-fast);
+
+      .el-icon {
+        font-size: 18px;
+        margin-right: 12px;
+      }
 
       &:hover {
-        background: #263445;
-        color: #409eff;
+        background: var(--bg-sidebar-hover);
+        color: rgba(255, 255, 255, 0.9);
       }
 
       &.is-active {
-        background: #409eff;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.15));
         color: #fff;
+        font-weight: 600;
+        box-shadow: 0 0 16px rgba(59, 130, 246, 0.15);
+
+        &::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 3px;
+          height: 20px;
+          background: linear-gradient(180deg, var(--primary-400), var(--primary-600));
+          border-radius: 0 3px 3px 0;
+        }
       }
     }
   }
@@ -229,43 +287,76 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
 }
 
 .header {
-  height: 60px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  padding: 0 var(--space-5);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  border-bottom: 1px solid var(--border-light);
+  z-index: 10;
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-4);
+
+    .el-button {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      color: var(--text-tertiary);
+
+      &:hover {
+        color: var(--primary-500);
+        background: var(--primary-50);
+      }
+    }
   }
 
   .header-right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-4);
+
+    .el-tag {
+      background: linear-gradient(135deg, var(--primary-50), #ede9fe);
+      border: 1px solid var(--primary-200);
+      color: var(--primary-700);
+      font-weight: 600;
+      height: 28px;
+      line-height: 26px;
+    }
 
     .user-info {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 4px;
+      padding: 6px 12px;
+      border-radius: var(--radius-md);
+      transition: all var(--transition-fast);
+      border: 1px solid transparent;
 
       &:hover {
-        background: #f5f7fa;
+        background: var(--gray-50);
+        border-color: var(--border-light);
+      }
+
+      .el-avatar {
+        border: 2px solid var(--bg-surface);
+        box-shadow: var(--shadow-sm);
       }
 
       .username {
-        font-size: 14px;
-        color: #606266;
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--text-primary);
       }
     }
   }
@@ -274,7 +365,7 @@ onMounted(async () => {
 .main {
   flex: 1;
   overflow: auto;
-  background: #f5f7fa;
-  padding: 16px;
+  background: var(--bg-body);
+  padding: var(--space-5);
 }
 </style>

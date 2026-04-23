@@ -9,7 +9,7 @@ import type {
   SetIdentityDefaultRequest,
   CUserRegisterRequest,
   ResetPasswordRequest
-} from '@/types/api.d'
+} from '@/types/api'
 
 export function registerCUser(data: CUserRegisterRequest): Promise<ResponseData<CUserResponse>> {
   return post('/cuser/register', data)

@@ -2,32 +2,37 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosR
 import { ElMessage, ElMessageBox } from 'element-plus'
 import router from '@/router'
 import type { ResponseData } from '@/types'
+import { isMockMode, mockRequest } from '@/mock'
+import { storage } from './storage'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 const instance: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
-  withCredentials: true, 
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  // CSRF 防护配置
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN'
 })
 
 let isRefreshing = false
-let pendingRequests: ((token: string) => void)[] = []
 
 function handleUnauthorized() {
   if (isRefreshing) return
   isRefreshing = true
+
   ElMessageBox.confirm('登录已过期，请重新登录', '提示', {
     confirmButtonText: '重新登录',
     cancelButtonText: '取消',
-    type: 'warning'
+    type: 'warning',
+    closeOnClickModal: false,
+    closeOnPressEscape: false
   }).then(() => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('userInfo')
-    localStorage.removeItem('currentUserInfo')
+    storage.clear()
     router.push('/login')
   }).finally(() => {
     isRefreshing = false
@@ -36,9 +41,12 @@ function handleUnauthorized() {
 
 instance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('token')
+    const token = storage.getToken()
     if (token && config.headers) {
       config.headers['Authorization'] = `Bearer ${token}`
+    }
+    if (isMockMode()) {
+      config.adapter = () => mockRequest(config)
     }
     return config
   },
@@ -69,6 +77,11 @@ instance.interceptors.response.use(
     return Promise.reject(new Error(message || '请求失败'))
   },
   (error) => {
+    // 忽略取消的请求
+    if (axios.isCancel(error)) {
+      return Promise.reject(error)
+    }
+
     if (error.response) {
       const { status, data } = error.response
 

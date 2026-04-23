@@ -5,7 +5,7 @@ import type {
   PageResult,
   ExcelTaskStatus
 } from '@/types'
-import type { UserRequest, AssignRolesRequest } from '@/types/api.d'
+import type { UserRequest, AssignRolesRequest } from '@/types/api'
 
 export function getUserList(): Promise<ResponseData<UserResponse[]>> {
   return get('/user/list')

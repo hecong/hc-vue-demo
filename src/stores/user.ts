@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { LoginResponse, CurrentUserInfo, CUserInfo, BUserInfo, IdentityItem } from '@/types'
+import type { LoginResponse, CurrentUserInfo } from '@/types'
 import { getCurrentUserInfo, logout as logoutApi } from '@/api/auth'
 import router from '@/router'
+import { storage } from '@/utils/storage'
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref<string>(localStorage.getItem('token') || '')
+  const token = ref<string>(storage.getToken() || '')
   const userInfo = ref<CurrentUserInfo | null>(null)
   const loginResponse = ref<LoginResponse | null>(null)
 
@@ -21,7 +22,7 @@ export const useUserStore = defineStore('user', () => {
 
   function setToken(newToken: string) {
     token.value = newToken
-    localStorage.setItem('token', newToken)
+    storage.setToken(newToken)
   }
 
   function setLoginResponse(response: LoginResponse) {
@@ -35,7 +36,7 @@ export const useUserStore = defineStore('user', () => {
       cUserInfo: response.cUserInfo,
       bUserInfo: response.bUserInfo
     }
-    localStorage.setItem('userInfo', JSON.stringify(response))
+    storage.setUserInfo(response)
   }
 
   async function fetchUserInfo() {
@@ -44,14 +45,14 @@ export const useUserStore = defineStore('user', () => {
       const res = await getCurrentUserInfo()
       if (res.data) {
         // 兼容后端返回 cuserInfo/buserInfo（全小写）的情况
-        const raw = res.data as any
-        const normalized = {
+        const raw = res.data as CurrentUserInfo & { cuserInfo?: unknown; buserInfo?: unknown }
+        const normalized: CurrentUserInfo = {
           ...raw,
-          cUserInfo: raw.cUserInfo ?? raw.cuserInfo ?? null,
-          bUserInfo: raw.bUserInfo ?? raw.buserInfo ?? null
+          cUserInfo: raw.cUserInfo ?? (raw.cuserInfo as CurrentUserInfo['cUserInfo']) ?? null,
+          bUserInfo: raw.bUserInfo ?? (raw.buserInfo as CurrentUserInfo['bUserInfo']) ?? null
         }
         userInfo.value = normalized
-        localStorage.setItem('currentUserInfo', JSON.stringify(normalized))
+        storage.setCurrentUserInfo(normalized)
       }
     } catch (error) {
       console.error('获取用户信息失败', error)
@@ -74,9 +75,7 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     userInfo.value = null
     loginResponse.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('userInfo')
-    localStorage.removeItem('currentUserInfo')
+    storage.clear()
   }
 
   function hasPermission(permission: string): boolean {
@@ -88,40 +87,30 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function initFromStorage() {
-    const storedToken = localStorage.getItem('token')
-    const storedUserInfo = localStorage.getItem('userInfo')
-    const storedCurrentUserInfo = localStorage.getItem('currentUserInfo')
+    const storedToken = storage.getToken()
+    const storedUserInfo = storage.getUserInfo()
+    const storedCurrentUserInfo = storage.getCurrentUserInfo()
+    
     if (storedToken) {
       token.value = storedToken
     }
-    if (storedCurrentUserInfo) {
-      try {
-        const parsed = JSON.parse(storedCurrentUserInfo)
-        if (parsed.userType) {
-          userInfo.value = parsed
-          loginResponse.value = storedUserInfo ? JSON.parse(storedUserInfo) : null
-          return
-        }
-      } catch (e) {
-        console.error('解析存储的用户信息失败', e)
-      }
+    
+    if (storedCurrentUserInfo && typeof storedCurrentUserInfo === 'object' && storedCurrentUserInfo !== null && 'userType' in storedCurrentUserInfo) {
+      userInfo.value = storedCurrentUserInfo as CurrentUserInfo
+      loginResponse.value = storedUserInfo as LoginResponse
+      return
     }
-    if (storedUserInfo) {
-      try {
-        const parsed = JSON.parse(storedUserInfo)
-        if (parsed.cUserInfo || parsed.bUserInfo) {
-          loginResponse.value = parsed
-          userInfo.value = {
-            userType: parsed.userType,
-            enterpriseId: parsed.enterpriseId,
-            roles: [],
-            permissions: [],
-            cUserInfo: parsed.cUserInfo,
-            bUserInfo: parsed.bUserInfo
-          }
-        }
-      } catch (e) {
-        console.error('解析存储的用户信息失败', e)
+
+    if (storedUserInfo && typeof storedUserInfo === 'object' && storedUserInfo !== null && 'userType' in storedUserInfo) {
+      const parsed = storedUserInfo as LoginResponse
+      loginResponse.value = parsed
+      userInfo.value = {
+        userType: parsed.userType,
+        enterpriseId: parsed.enterpriseId,
+        roles: [],
+        permissions: [],
+        cUserInfo: parsed.cUserInfo,
+        bUserInfo: parsed.bUserInfo
       }
     }
   }
@@ -148,4 +137,6 @@ export const useUserStore = defineStore('user', () => {
     hasRole,
     initFromStorage
   }
+}, {
+  persist: false
 })

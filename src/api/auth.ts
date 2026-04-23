@@ -3,8 +3,7 @@ import type {
   ResponseData,
   LoginResponse,
   CurrentUserInfo,
-  CheckEnterpriseResponse,
-  IdentityItem
+  CheckEnterpriseResponse
 } from '../types/index'
 import type {
   CPasswordLoginRequest,
@@ -15,9 +14,8 @@ import type {
   SendCodeRequest,
   CheckEnterpriseRequest,
   IdentityListRequest,
-  SelectIdentityRequest,
-  SetIdentityDefaultRequest
-} from '../types/api.d'
+  SelectIdentityRequest
+} from '../types/api'
 
 export function getRsaPublicKey(): Promise<ResponseData<string>> {
   return get('/auth/rsa-public-key')

@@ -1,140 +1,104 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElTable, ElTableColumn, ElButton, ElPagination, ElMessage, ElMessageBox, ElForm, ElFormItem, ElInput, ElDialog, ElTag, ElSelect, ElOption } from 'element-plus'
+import { ref, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Search, Refresh } from '@element-plus/icons-vue'
 import { getUserPage, addUser, editUser, deleteUser, assignRoles } from '@/api/user'
 import { getRoleList } from '@/api/system'
 import type { UserResponse, RoleResponse } from '@/types'
-import type { UserRequest } from '@/types/api.d'
+import type { UserRequest } from '@/types/api'
 import { formatDate } from '@/utils'
+import { useTable, useDialog } from '@/composables'
 
-const loading = ref(false)
-const tableData = ref<UserResponse[]>([])
-const total = ref(0)
-const pageNum = ref(1)
-const pageSize = ref(10)
+// ==================== 表格 ====================
+const {
+  loading,
+  tableData,
+  total,
+  pageNum,
+  pageSize,
+  searchParams,
+  handleSearch,
+  handleReset,
+  handlePageChange,
+  handleSizeChange,
+  fetchData
+} = useTable<UserResponse, { username: string; name: string; phone: string }>(
+  async (params) => {
+    const res = await getUserPage({
+      pageNum: params.pageNum,
+      pageSize: params.pageSize,
+      username: params.username || undefined,
+      name: params.name || undefined,
+      phone: params.phone || undefined
+    })
+    return res.data ?? undefined
+  },
+  { username: '', name: '', phone: '' }
+)
 
-const searchForm = reactive({
-  username: '',
-  name: '',
-  phone: ''
-})
-
-const dialogVisible = ref(false)
-const dialogTitle = ref('添加用户')
+// ==================== 添加/编辑弹窗 ====================
 const formRef = ref()
-const submitting = ref(false)
 
-const formData = reactive<UserRequest>({
+const defaultForm: UserRequest = {
   username: '',
   password: '',
   name: '',
   email: '',
   phone: '',
   status: 1
-})
+}
 
-const formRules = {
+const {
+  visible: dialogVisible,
+  title: dialogTitle,
+  isEdit,
+  submitting,
+  formData,
+  openAdd: openAddDialog,
+  openEdit: _openEditDialog,
+  handleSubmit
+} = useDialog<UserRequest>(
+  async (data, editing, id) => {
+    if (editing && id) {
+      await editUser(Number(id), data)
+      ElMessage.success('编辑成功')
+    } else {
+      await addUser(data)
+      ElMessage.success('添加成功')
+    }
+    fetchData()
+  },
+  defaultForm,
+  { addTitle: '添加用户', editTitle: '编辑用户' }
+)
+
+const formRules = computed(() => ({
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  password: isEdit.value ? [] : [{ required: true, message: '请输入密码', trigger: 'blur' }],
   phone: [{ pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }],
   email: [{ type: 'email', message: '请输入正确的邮箱', trigger: 'blur' }]
-}
+}))
 
-const fetchData = async () => {
-  loading.value = true
-  try {
-    const res = await getUserPage({
-      pageNum: pageNum.value,
-      pageSize: pageSize.value,
-      username: searchForm.username || undefined,
-      name: searchForm.name || undefined,
-      phone: searchForm.phone || undefined
-    })
-    if (res.data) {
-      tableData.value = res.data.list
-      total.value = res.data.total
-    }
-  } catch (error) {
-    console.error(error)
-  } finally {
-    loading.value = false
-  }
-}
-
-const handleSearch = () => {
-  pageNum.value = 1
-  fetchData()
-}
-
-const handleReset = () => {
-  searchForm.username = ''
-  searchForm.name = ''
-  searchForm.phone = ''
-  handleSearch()
-}
-
-const handlePageChange = (page: number) => {
-  pageNum.value = page
-  fetchData()
-}
-
-const handleSizeChange = (size: number) => {
-  pageSize.value = size
-  pageNum.value = 1
-  fetchData()
-}
-
-const openAddDialog = () => {
-  dialogTitle.value = '添加用户'
-  Object.assign(formData, {
-    username: '',
-    password: '',
-    name: '',
-    email: '',
-    phone: '',
-    status: 1
-  })
-  dialogVisible.value = true
-}
-
-const openEditDialog = (row: UserResponse) => {
-  dialogTitle.value = '编辑用户'
-  Object.assign(formData, {
+function openEditDialog(row: UserResponse) {
+  _openEditDialog({
+    id: row.id,
     username: row.username,
     password: '',
     name: row.name,
     email: row.email,
     phone: row.phone,
     status: row.status
-  })
-  formData.id = row.id
-  dialogVisible.value = true
+  } as unknown as UserRequest & { id: number })
 }
 
-const handleSubmit = async () => {
+async function submitForm() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
-
-  submitting.value = true
-  try {
-    if (dialogTitle.value === '添加用户') {
-      await addUser(formData)
-      ElMessage.success('添加成功')
-    } else {
-      await editUser(formData.id!, formData)
-      ElMessage.success('编辑成功')
-    }
-    dialogVisible.value = false
-    fetchData()
-  } catch (error) {
-    console.error(error)
-  } finally {
-    submitting.value = false
-  }
+  await handleSubmit(() => Promise.resolve(true))
 }
 
+// ==================== 删除 ====================
 const handleDelete = async (row: UserResponse) => {
   try {
     await ElMessageBox.confirm('确定要删除该用户吗？', '提示', {
@@ -147,18 +111,13 @@ const handleDelete = async (row: UserResponse) => {
     fetchData()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error(error)
+      ElMessage.error('删除失败，请重试')
     }
   }
 }
 
-const getStatusTagType = (status: number) => {
-  return status === 1 ? 'success' : 'danger'
-}
-
-const getStatusText = (status: number) => {
-  return status === 1 ? '启用' : '禁用'
-}
+const getStatusTagType = (status: number) => status === 1 ? 'success' : 'danger'
+const getStatusText = (status: number) => status === 1 ? '启用' : '禁用'
 
 // ==================== 分配角色 ====================
 const assignDialogVisible = ref(false)
@@ -177,8 +136,8 @@ async function openAssignRoles(row: UserResponse) {
   try {
     const res = await getRoleList()
     allRoles.value = res.data || []
-  } catch (e) {
-    // ignore
+  } catch {
+    ElMessage.error('获取角色列表失败')
   } finally {
     assignLoading.value = false
   }
@@ -190,14 +149,10 @@ async function submitAssignRoles() {
     await assignRoles({ userId: assignUserId.value, roleIds: selectedRoleIds.value })
     ElMessage.success('角色分配成功')
     assignDialogVisible.value = false
-  } catch (e) {
-    // ignore
+  } catch {
+    ElMessage.error('分配角色失败，请重试')
   }
 }
-
-onMounted(() => {
-  fetchData()
-})
 </script>
 
 <template>
@@ -212,15 +167,15 @@ onMounted(() => {
         </div>
       </template>
 
-      <el-form :inline="true" :model="searchForm" class="search-form">
+      <el-form :inline="true" :model="searchParams" class="search-form">
         <el-form-item label="用户名">
-          <el-input v-model="searchForm.username" placeholder="请输入用户名" clearable />
+          <el-input v-model="searchParams.username" placeholder="请输入用户名" clearable />
         </el-form-item>
         <el-form-item label="姓名">
-          <el-input v-model="searchForm.name" placeholder="请输入姓名" clearable />
+          <el-input v-model="searchParams.name" placeholder="请输入姓名" clearable />
         </el-form-item>
         <el-form-item label="手机号">
-          <el-input v-model="searchForm.phone" placeholder="请输入手机号" clearable />
+          <el-input v-model="searchParams.phone" placeholder="请输入手机号" clearable />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
@@ -277,9 +232,9 @@ onMounted(() => {
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="80px">
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="formData.username" placeholder="请输入用户名" :disabled="dialogTitle === '编辑用户'" />
+          <el-input v-model="formData.username" placeholder="请输入用户名" :disabled="isEdit" />
         </el-form-item>
-        <el-form-item v-if="dialogTitle === '添加用户'" label="密码" prop="password">
+        <el-form-item v-if="!isEdit" label="密码" prop="password">
           <el-input v-model="formData.password" type="password" placeholder="请输入密码" show-password />
         </el-form-item>
         <el-form-item label="姓名" prop="name">
@@ -300,7 +255,7 @@ onMounted(() => {
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
 
@@ -327,30 +282,46 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .user-management {
+  animation: fadeIn 0.4s var(--transition-base);
+
   .page-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
 
     .title {
-      font-size: 16px;
-      font-weight: 500;
+      font-size: var(--text-lg);
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
     }
   }
 
   .search-form {
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
+    padding: var(--space-4);
+    background: var(--gray-50);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
   }
 
   .pagination-container {
     display: flex;
     justify-content: flex-end;
-    margin-top: 16px;
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-light);
   }
 
   .role-item {
-    padding: 6px 0;
-    border-bottom: 1px solid #f0f0f0;
+    padding: 10px var(--space-3);
+    border-bottom: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    transition: background var(--transition-fast);
+
+    &:hover {
+      background: var(--gray-50);
+    }
 
     &:last-child {
       border-bottom: none;

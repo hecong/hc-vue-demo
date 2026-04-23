@@ -4,7 +4,7 @@ import type {
   RoleResponse,
   PermissionResponse
 } from '@/types'
-import type { RoleRequest, AssignPermissionsRequest, PermissionRequest } from '@/types/api.d'
+import type { RoleRequest, AssignPermissionsRequest, PermissionRequest } from '@/types/api'
 
 export function getRoleList(): Promise<ResponseData<RoleResponse[]>> {
   return get('/sys/role/list')

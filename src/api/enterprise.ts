@@ -12,7 +12,7 @@ import type {
   EnterpriseUserCreateRequest,
   ResetEnterpriseUserPasswordRequest,
   ChangePasswordRequest
-} from '@/types/api.d'
+} from '@/types/api'
 
 export function getEnterpriseById(id: number): Promise<ResponseData<EnterpriseResponse>> {
   return get(`/enterprise/get/${id}`)
